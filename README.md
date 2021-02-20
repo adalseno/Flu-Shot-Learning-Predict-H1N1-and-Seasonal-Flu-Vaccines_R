@@ -17,3 +17,5 @@ The problem is that row.names in R are strings so I had to convert it back to co
 I didn't upload the data files. You can get them from DrivenData or in another [repository of mine](https://github.com/adalseno/Flu-Shot-Learning-Predict-H1N1-and-Seasonal-Flu-Vaccines). My advice is to create a project in RStudio in a new folder with the Rmd file and the data files.
 
 The text is taken as is from the original file even where R has a completely different approach. The code is simple and straighfoward so it should be easy to understand everything. The html file is the kintr version of the Rmd file with code and output, give it a look. I hope you will enjoy.
+
+![](screenshot.png)
