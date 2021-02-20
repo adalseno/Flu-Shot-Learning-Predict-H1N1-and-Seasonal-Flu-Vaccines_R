@@ -1,0 +1,495 @@
+---
+title: "Benchmark"
+author: "Andrea Dalseno"
+date: "2/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading the data
+
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>On the <a href="https://www.drivendata.org/competitions/66/flu-shot-learning/data/">data download page</a>, we provide everything you need to get started:</p>
+<ul>
+<li><strong>Training Features</strong>: These are the input variables that your model will use to predict the probability that people received H1N1 flu and seasonal flu vaccines. There are 35 feature columns in total, each a response to a survey question. These questions cover several different topics, such as whether people observed safe behavioral practices, their opinions about the diseases and the vaccines, and their demographics. Check out the <a href="https://www.drivendata.org/competitions/66/flu-shot-learning/page/211/">problem description</a> page for more information. </li>
+<li><strong>Training Labels</strong>: These are the labels corresponding to the observations in the training features. There are two target variables: <code>h1n1_vaccine</code> and <code>seasonal_vaccine</code>. Both are binary variables, with 1 indicating that a person received the respective flu vaccine and 0 indicating that a person did not receive the respective flu vaccine. Note that this is what is known as a "multilabel" modeling task.</li>
+<li><strong>Test Features</strong>: These are the features for observations that you will use to generate the submission predictions after training a model. We don't give you the labels for these samples—it's up to you to generate them.</li>
+<li><strong>Submission Format</strong>: This file serves as an example for how to format your submission. It contains the index and columns for our submission prediction. The two target variable columns are filled with 0.5 and 0.7 as an example. Your submission to the leaderboard must be in this exact format (with different prediction values) in order to be scored successfully!</li>
+</ul>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Let's start by importing the libraries that we will need to load and explore the data.</p>
+
+```{r, message=FALSE}
+library(tidyverse)
+library(kableExtra)
+library(rlang)
+library(janitor)
+```
+Next, we can load the datasets and begin taking a look.
+
+```{r}
+features_df <- read.csv('training_set_features.csv', header=TRUE, row.names="respondent_id")
+
+labels_df <- read.csv('training_set_labels.csv', header=TRUE, row.names="respondent_id")
+```
+
+
+```{r}
+sprintf("features_df rows: %i, columns %i", nrow(features_df), ncol(features_df))
+
+head(features_df)%>%
+  kbl() %>%
+  kable_material(c("striped", "hover"))
+
+#knitr::kable(head(features_df), format = "markdown")
+```
+Each row is a person who was a survey respondent. The columns are the feature values corresponding to those people. We have 26,707 observations and 35 features.
+```{r}
+str(features_df)
+```
+Now let's look at the labels.
+
+```{r}
+sprintf("labels_df rows: %i, columns %i", nrow(labels_df), ncol(labels_df))
+head(labels_df)%>%
+  kbl()%>%
+    kable_material(c("striped", "hover"))
+
+```
+We have the same 26,707 observations, and two target variables that we have labels for.
+
+Let's double-check that the rows between the features and the labels match up. We don't want to have the wrong labels. Numpy's assert_array_equal will error if the two arrays—the row indices of the two data frames—don't match up.
+
+np.testing.assert_array_equal(features_df.index.values, labels_df.index.values)
+The assertion ran, and nothing happened. That's good, it means there is no problem. If the two index arrays were not the same, there would be an error.
+
+
+
+## EXPLORING THE DATA
+```{r}
+library(ggplot2)
+```
+###Labels
+Let's start by taking a look at our distribution of the two target variables.
+
+
+```{r  echo=TRUE}
+p1 <- labels_df %>%
+    group_by(h1n1_vaccine) %>% summarise(total = n()) %>%
+ggplot( aes(x=h1n1_vaccine, y=total)) +
+  geom_bar(stat='identity') +
+  ggtitle("Proportion of H1N1 Vaccine") +
+  xlab('h1n1 vaccine')+
+  coord_flip()
+
+p2 <- labels_df %>%
+    group_by(seasonal_vaccine) %>% summarise(total = n()) %>%
+ggplot( aes(x=seasonal_vaccine, y=total)) +
+  geom_bar(stat='identity') +
+  ggtitle("Proportion of Seasonal Vaccine") +
+  xlab('seasonal vaccine')+
+  coord_flip()
+
+library(grid)
+grid.newpage()
+grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+
+```
+
+It looks like roughy half of people received the seasonal flu vaccine, but only about 20% of people received the H1N1 flu vaccine. In terms of class balance, we say that the seasonal flu vaccine target has balanced classes, but the H1N1 flu vaccine target has moderately imbalanced classes.
+
+Are the two target variables independent? Let's take a look.
+
+```{r}
+ftable(addmargins(prop.table(table(labels_df))))
+```
+
+```{r}
+cor(labels_df$h1n1_vaccine, y = labels_df$seasonal_vaccine, use = "everything",
+    method = "pearson")
+```
+
+These two variables have a phi coefficient of 0.37, indicating a moderate positive correlation. We can see that in the cross-tabulation as well. Most people who got an H1N1 flu vaccine also got the seasonal flu vaccine. While a minority of people who got the seasonal vaccine got the H1N1 vaccine, they got the H1N1 vaccine at a higher rate than those who did not get the seasonal vaccine.
+
+## Features
+Next, let's take a look at our features. From the problem description page, we know that the feature variables are almost all categorical: a mix of binary, ordinal, and nominal features. Let's pick a few and see how the rates of vaccination may differ across the levels of the feature variables.
+
+First, let's combine our features and labels into one dataframe.
+```{r}
+joined_df <- transform(merge(features_df,labels_df,by='row.names',all=TRUE), row.names=Row.names, Row.names=NULL)
+sprintf("joined_df rows: %i, columns %i", nrow(joined_df), ncol(joined_df))
+head(joined_df)%>%
+  kbl()%>%
+    kable_material(c("striped", "hover"))
+```
+###Prototyping a Plot
+Next, let's see how the features are correlated with the target variables. We'll start with trying to visualize if there is simple bivariate correlation. If a feature is correlated with the target, we'd expect there to be different patterns of vaccination as you vary the values of the feature.
+
+Jumping right to the right final visualization is hard. We can instead pick one feature and one target and work our way up to a prototype, before applying it to more features and both targets. We'll use `h1n1_concern`, the level of concern the person showed about the H1N1 flu, and `h1n1_vaccine` as a target variable.
+
+First, we'll get the count of observations for each combination of those two variables.
+
+```{r}
+counts <- joined_df %>%
+  select(h1n1_concern, h1n1_vaccine)%>%
+  group_by(h1n1_concern, h1n1_vaccine)%>%
+  summarise(n=n(), .groups = 'drop')%>%
+  na.omit() %>%
+  pivot_wider(names_from = h1n1_vaccine, values_from = n)%>%
+  rename('h1'='1', 'h0'='0')
+
+counts
+```
+**ggplot prefers a long structure**
+
+```{r}
+joined_df %>%
+  select(h1n1_concern, h1n1_vaccine)%>%
+  group_by(h1n1_concern, h1n1_vaccine)%>%
+  summarise(n=n())%>%
+  na.omit() %>%
+  mutate(h1n1_vaccine=as.factor(h1n1_vaccine), h1n1_concern=as.factor(h1n1_concern))%>%
+  ggplot(aes(x=reorder(h1n1_concern, desc(h1n1_concern)), y=n, fill=h1n1_vaccine))+
+  geom_bar(position="dodge",stat='identity' ) +
+  ggtitle("h1n1_vaccine")+
+    xlab('h1n1_vaccine')+
+    coord_flip()
+```
+<p>Unfortunately, it's still hard to tell whether <code>h1n1_concern</code> levels show differences in someone's likelihood to get vaccinated. Since the two classes are imbalanced, we just see fewer vaccinated observations for every level of <code>h1n1_concern</code>. It swamps out any other trends that might exist.</p>
+<p>Let's instead look at the <strong>rate</strong> of vaccination for each level of <code>h1n1_concern</code>.</p>
+
+```{r}
+h1n1_concern_counts  <-  cbind(counts$h1n1_concern,rowSums(counts))
+
+h1n1_concern_counts
+```
+
+```{r}
+props <- counts %>%
+  adorn_totals(where='col')%>%
+  mutate(h0=h0/Total, h1=h1/Total)%>%
+  select(h1n1_concern,h0,h1)
+
+props
+
+```
+
+```{r}
+props %>%
+  pivot_longer(names_to='h1n1_vaccine', cols=!h1n1_concern, values_to = 'pp')%>%
+  ggplot(aes(x=h1n1_concern, y=pp, fill=h1n1_vaccine))+
+  geom_bar(position="dodge",stat='identity' ) +
+  ggtitle("")+
+    xlab('h1n1_concern')+
+    coord_flip()
+
+```
+<p>Now we have a clearer picture of what's happening! In this plot, each pair of blue (no vaccine) and orange (received vaccine) bars add up to 1.0. We can clearly see that even though most people don't get the H1N1 vaccine, they are more likely to if they have a higher level of concern. It looks like <code>h1n1_concern</code> will be a useful feature when we get to modeling.</p>
+<p>Since every pair of bars adds up to 1.0 and we only have two bars, this is actually a good use case for a stacked bar chart, to make it even easier to read.</p>
+
+```{r}
+props %>%
+  pivot_longer(names_to='h1n1_vaccine', cols=!h1n1_concern, values_to = 'pp')%>%
+  ggplot(aes(x=h1n1_concern, y=pp, fill=h1n1_vaccine))+
+  geom_bar(position="stack",stat='identity' ) +
+  ggtitle("")+
+    xlab('h1n1_concern')+
+    coord_flip()
+```
+This is a more compact plot showing the same thing as before.
+
+###Plotting more variables
+Let's factor this code into a function so we can use it on more variables.
+
+```{r}
+vaccination_rate_plot <-  function(column, target, df ) {
+  
+  # Stacked bar chart of vaccination rate for `target` against 
+  #   `column`. 
+  #   
+  #   Args:
+  #       column (string): column name of feature variable
+  #       target (string): column name of target variable
+  #       df (pandas DataFrame): dataframe that contains columns 
+  #           `col` and `target`
+  #       returns a ggplot
+  column <- sym(column)
+  target <- ensym(target)
+   counts <-  df%>%
+     select(!!column, !!target)%>%
+     group_by(!!column, !!target)%>%
+     summarise(n=n(), .groups = 'drop')%>%
+     na.omit()%>%
+     pivot_wider(names_from = !!target, values_from = n)%>%
+     rename('h1'='1', 'h0'='0')
+   
+
+   
+   props <- counts %>%
+  adorn_totals(where='col')%>%
+  mutate(h0=h0/Total, h1=h1/Total)%>%
+  select(!!column,h0,h1)
+
+
+   p3 <- props %>%
+  pivot_longer(names_to=as_string(target), cols=-1, values_to = 'pp')%>%
+  ggplot(aes(x=!!column, y=pp, fill=!!target))+
+  geom_bar(position="stack",stat='identity' ) +
+  ggtitle("")+
+    xlab({{column}})+
+    ylab('')+
+    coord_flip()
+   
+            
+}
+```
+<p>Then, we'll loop through several columns and plot against both <code>h1n1_vaccine</code> and <code>seasonal_vaccine</code>.</p>
+
+
+```{r}
+cols_to_plot = c(
+    'h1n1_concern',
+    'h1n1_knowledge',
+    'opinion_h1n1_vacc_effective',
+    'opinion_h1n1_risk',
+    'opinion_h1n1_sick_from_vacc',
+    'opinion_seas_vacc_effective',
+    'opinion_seas_risk',
+    'opinion_seas_sick_from_vacc',
+    'sex',
+    'age_group',
+    'race'
+)
+for (i in  cols_to_plot){
+  tmp1 <- vaccination_rate_plot(i, 'h1n1_vaccine', joined_df)
+  tmp2 <- vaccination_rate_plot(i, 'seasonal_vaccine', joined_df)
+  grid.newpage()
+grid.draw(rbind(ggplotGrob(tmp1), ggplotGrob(tmp2), size = "last"))
+}
+
+```
+
+<p>It looks like the knowledge and opinion questions have pretty strong signal for both target variables.</p>
+<p>The demographic features have stronger correlation with <code>seasonal_vaccine</code>, but much less so far <code>h1n1_vaccine</code>. In particular, we interestingly see a strong correlation with <code>age_group</code> with the <code>seasonal_vaccine</code> but not with <code>h1n1_vaccine</code>. It appears that with seasonal flu, people act appropriately according to the fact that people <a href="https://www.cdc.gov/flu/highrisk/index.htm">more impacted and have higher risk of flu-related complications with age</a>. It turns out though that H1N1 flu has an interesting relationship with age: <a href="https://www.cdc.gov/h1n1flu/surveillanceqa.htm#7">even though older people have higher risk of complications, they were less likely to get infected!</a> While we know anything about causality from this analysis, it seems like the risk factors ended up being reflected in the vaccination rates.</p>
+
+##Building some models
+<p>Let's start working on training some models! We will be using logistic regression, a simple and fast linear model for classification problems. Logistic regression is a great model choice for a first-pass baseline model when starting out on a problem.</p>
+```{r}
+
+
+```
+<p>We will be using scikit-learn's logistic regression implementation.</p>
+<p>Standard logistic regression only works with numeric input for features. Since this is a benchmark, we're going to build simple models only using the numeric columns of our dataset.</p>
+<p>Categorical variables with non-numeric values take a little more preprocessing to prepare for many machine learning algorithms. We're not going to deal with them in this benchmark walkthrough, but there are many different ways to encode categorical variables into numeric values. Check out <a href="https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OneHotEncoder.html">one-hot encoding</a> and <a href="https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.OrdinalEncoder.html">ordinal encoding</a> to get started if you're not familiar.</p>
+```{r}
+for (i in colnames(features_df)){
+  if (class(features_df[[i]]) != 'character'){
+    print(i)
+  }
+}
+
+```
+
+```{r}
+numeric_cols <- c()
+for (i in colnames(features_df)){
+  if (class(features_df[[i]]) != 'character'){
+    numeric_cols <-  rbind(numeric_cols,i)
+  }
+}
+numeric_cols <- as.vector(numeric_cols)
+```
+##Feature-Preprocessing
+<p>There are two important data preprocessing steps before jumping to the logistic regression:</p>
+<ul>
+<li><strong>Scaling</strong>: Transform all features to be on the same scale. This matters when using regularization, which we will discuss in the next section. We will use <a href="https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html"><code>StandardScaler</code></a>, also known as Z-score scaling. This scales and shifts features so that they have zero mean and unit variance. </li>
+<li><strong>NA Imputation</strong>: Logistic regression does not handle NA values. We will use median imputation, which fills missing values with the median from the training data, implemented with <a href="https://scikit-learn.org/stable/modules/generated/sklearn.impute.SimpleImputer.html"><code>SimpleImputer</code></a>. </li>
+</ul>
+<p>We are also going to start using Scikit-Learn's built-in composition functionality to encapsulate everything into a pipeline. Building pipelines is a best practice for building machine learning models. Among <a href="https://scikit-learn.org/stable/modules/compose.html">other benefits</a>, it makes it easy to reuse on new data (such as our test data). The great thing about pipelines is that they have the same interface as transformers and estimators, so you can treat them as if they are.</p>
+<p>In the block below, we're going to first chain together the preprocessing steps (scaling and imputing) into one intermediate pipeline object <code>numeric_preprocessing_steps</code>. Then, we use that with Scikit-Learn's <a href="https://scikit-learn.org/stable/modules/generated/sklearn.compose.ColumnTransformer.html"><code>ColumnTransformer</code></a>, which is a convenient way to grab columns out of a pandas data frame and then apply a specified transformer.</p>
+<p>If we wanted to do other transformations on other columns, such as encoding our non-numeric columns, that would be additional entries to the list in the <code>transformers</code> argument of <code>ColumnTransformer</code>.</p>
+```{r}
+library(scales)
+scaled_df <- joined_df%>%
+  select(c(numeric_cols,c('h1n1_vaccine', 'seasonal_vaccine')))%>%
+  sapply(function(.) rescale(.))
+
+scaled_df <- as.data.frame(scaled_df)%>%
+  mutate_all(~ifelse(is.na(.), median(., na.rm=TRUE), .))
+```
+<p>Next, we're going to define our estimators.</p>
+<p>We'll use scikit-learn's default hyperparameters for <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html"><code>LogisticRegression</code></a> of L2 (a.k.a. Ridge) regularization with <code>C</code> value (inverse regularization strength) of 1. <a href="https://towardsdatascience.com/regularization-in-machine-learning-76441ddcf99a">Regularization</a> is useful because it reduces overfitting. Check out scikit-learn's documentation for <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html"><code>LogisticRegression</code></a> to read more about the options. When building your own model, you may want to tune your hyperparameters using something like <a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html">GridSearchCV</a>.</p>
+<p>Because we have two labels we need to predict, we can use Scikit-Learn's <a href="https://scikit-learn.org/stable/modules/generated/sklearn.multioutput.MultiOutputClassifier.html"><code>MultiOutputClassifier</code></a>. This is a convenient shortcut for training two of the same type of model and having them run together.</p>
+##Estimator
+```{r}
+# Logistics Regression
+#model <- glm(Survived ~.,family=binomial(link='logit'),data=train)
+
+
+```
+##Training and Evaluation
+<p>Finally, let's get ready to train and evaluate our model.</p>
+<p>Let's split our available data into a training and evaluation set. (We're going to reserve "test set" to refer to the final predictions we upload to the platform.) We'll use a third of our data for evaluation.</p>
+<p>Recall that earlier in our exploratory analysis, the <code>h1n1_vaccine</code> label classes were moderately imbalanced. Sometimes this can lead to lopsided splits, which can lead to generalization problems with fitting and/or evaluating the model. We should have a large enough dataset that a randomly shuffled split should keep the same proportions, but we can use the <code>stratify</code> argument to enforce even splits.</p>
+```{r}
+library(caTools)
+set.seed(101) 
+sample = sample.split(scaled_df$h1n1_concern, SplitRatio = .70)
+train = subset(scaled_df, sample == TRUE)
+test  = subset(scaled_df, sample == FALSE)
+```
+
+Now, let's train the model!
+
+```{r}
+model.h1 <- glm(h1n1_vaccine~.-seasonal_vaccine,family=binomial(link='logit'),data=train)
+model.se <- glm(seasonal_vaccine~.-h1n1_vaccine,family=binomial(link='logit'),data=train)
+```
+Make predictions
+```{r}
+h1n1.probs = predict(model.h1, type='response', newdata=test)
+se.probs = predict(model.se, type='response', newdata=test)
+```
+<p>This has given us back a list of two (n_obs, 2) arrays. The first array is for <code>h1n1_vaccine</code>, and the second array is for <code>seasonal_vaccine</code>. The two columns for each array are probabilities for class 0 and class 1 respectively. That means we want the second column (index 1) for each of the two arrays. Let's grab those and put them in a data frame.</p>
+
+<p>This competition uses <a href="https://towardsdatascience.com/understanding-auc-roc-curve-68b2303cc9c5">ROC AUC</a> as the metric. Let's plot ROC curves and take a look. Unfortunately, scikit-learn's convenient <a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.plot_roc_curve.html"><code>plot_roc_curve</code></a> doesn't support multilabel, so we'll need to make the plot ourselves.</p>
+```{r}
+library(pROC)
+pROC_obj <- roc(test$h1n1_vaccine,h1n1.probs,
+            smoothed = TRUE,
+            # arguments for ci
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            # arguments for plot
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+## Warning in plot.ci.se(sens.ci, type = "shape", col = "lightblue"): Low
+## definition shape.
+plot(sens.ci, type="bars")
+```
+```{r}
+auc(pROC_obj)
+```
+
+```{r}
+pROC_obj <- roc(test$seasonal_vaccine,se.probs,
+            smoothed = TRUE,
+            # arguments for ci
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            # arguments for plot
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+## Warning in plot.ci.se(sens.ci, type = "shape", col = "lightblue"): Low
+## definition shape.
+plot(sens.ci, type="bars")
+```
+```{r}
+auc(pROC_obj)
+```
+
+<p>An AUC score of 0.5 is no better than random, and an AUC score of 1.0 is a perfect model. Both models look like they generally perform similarly. Our scores of around 0.83 are not great, but they're not bad either!</p>
+<p>The competition metric is the average between these two AUC values. Scikit-learn's <a href="http://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html"><code>roc_auc_score</code></a> <em>does</em> support multilabel, so we can use that directly.</p>
+##Retrain Model on Full Dataset
+<p>Now that we have an idea of our performance, we'll want to retrain our model on the full dataset before generating our predictions on the test set.</p>
+```{r}
+scaled_df.h1 <- scaled_df%>%
+  select(-seasonal_vaccine)
+scaled_df.se <- scaled_df%>%
+  select(-h1n1_vaccine)
+```
+
+
+```{r}
+final_model.h1 <- glm(h1n1_vaccine~.,family=binomial(link='logit'),data=scaled_df.h1)
+final_model.se <- glm(seasonal_vaccine~.,family=binomial(link='logit'),data=scaled_df.se)
+```
+
+```{r}
+test_df <- read.csv('test_set_features.csv', header=TRUE, row.names="respondent_id")
+```
+
+```{r}
+scaled_test <- test_df%>%
+  select(c(numeric_cols))%>%
+  sapply(function(.) rescale(.))
+
+scaled_test <- as.data.frame(scaled_test)%>%
+  mutate_all(~ifelse(is.na(.), median(., na.rm=TRUE), .))
+```
+
+```{r}
+test_probas.h1 = predict(final_model.h1, type = 'response', newdata = scaled_test)
+test_probas.se = predict(final_model.se, type = 'response', newdata = scaled_test)
+
+```
+<p>Let's make predictions on the test set! Again, for this competition, we want the <strong>probabilities</strong>, not the binary label predictions. We'll again use the <code>.predict_proba</code> method to get those.</p>
+<p>As before, this gives us back two arrays: one for <code>h1n1_vaccine</code>, and one for <code>seasonal_vaccine</code>. The two columns for each array are probabilities for class 0 and class 1 respectively. That means we want the second column (index 1) for each of the two arrays.</p>
+Let's read in the submission format file so we can put our predictions into it.
+
+```{r}
+submission_df <- read.csv('submission_format.csv', header=TRUE, row.names="respondent_id")
+
+```
+```{r}
+head(submission_df)%>%
+  kbl()%>%
+    kable_material(c("striped", "hover"))
+```
+We want to replace those 0.5s and 0.7s with our predictions. First, make sure we have the rows in the same order by comparing the indices. Then, we can drop in the appropriate columns from our predicted probabilities.
+```{r}
+# identical here won't work since test_probas.h1 is a vector. Just check the both have the same lenght
+assertthat::are_equal(nrow(submission_df), length(test_probas.h1))
+assertthat::are_equal(nrow(submission_df), length(test_probas.se))
+
+
+```
+
+```{r}
+# Save predictions to submission data frame
+submission_df[["h1n1_vaccine"]] = test_probas.h1
+submission_df[["seasonal_vaccine"]] = test_probas.se
+```
+```{r}
+head(submission_df)%>%
+  kbl()%>%
+    kable_material(c("striped", "hover"))
+```
+
+
+```{r}
+# Transform row names in column and convert it to integer (otherwise they will be strings)
+library(data.table)
+setDT(submission_df, keep.rownames = 'respondent_id')[]
+
+submission_df <- submission_df %>%
+  mutate(respondent_id=as.integer(respondent_id))
+```
+
+
+
+```{r}
+write.csv(submission_df,"submission.csv", row.names = FALSE)
+```
+##Submit to the Leaderboard
+<p>We can then head over to the competition <a href="https://www.drivendata.org/competitions/66/flu-shot-learning/submissions/">submissions page</a> to submit the predictions.</p>
+![score](score.png)
+
+Done!
