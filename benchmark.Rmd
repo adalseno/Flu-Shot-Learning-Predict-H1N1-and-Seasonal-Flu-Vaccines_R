@@ -133,7 +133,7 @@ head(joined_df)%>%
   kbl()%>%
     kable_material(c("striped", "hover"))
 ```
-###Prototyping a Plot
+### Prototyping a Plot
 Next, let's see how the features are correlated with the target variables. We'll start with trying to visualize if there is simple bivariate correlation. If a feature is correlated with the target, we'd expect there to be different patterns of vaccination as you vary the values of the feature.
 
 Jumping right to the right final visualization is hard. We can instead pick one feature and one target and work our way up to a prototype, before applying it to more features and both targets. We'll use `h1n1_concern`, the level of concern the person showed about the H1N1 flu, and `h1n1_vaccine` as a target variable.
@@ -209,7 +209,7 @@ props %>%
 ```
 This is a more compact plot showing the same thing as before.
 
-###Plotting more variables
+### Plotting more variables
 Let's factor this code into a function so we can use it on more variables.
 
 ```{r}
@@ -283,7 +283,7 @@ grid.draw(rbind(ggplotGrob(tmp1), ggplotGrob(tmp2), size = "last"))
 <p>It looks like the knowledge and opinion questions have pretty strong signal for both target variables.</p>
 <p>The demographic features have stronger correlation with <code>seasonal_vaccine</code>, but much less so far <code>h1n1_vaccine</code>. In particular, we interestingly see a strong correlation with <code>age_group</code> with the <code>seasonal_vaccine</code> but not with <code>h1n1_vaccine</code>. It appears that with seasonal flu, people act appropriately according to the fact that people <a href="https://www.cdc.gov/flu/highrisk/index.htm">more impacted and have higher risk of flu-related complications with age</a>. It turns out though that H1N1 flu has an interesting relationship with age: <a href="https://www.cdc.gov/h1n1flu/surveillanceqa.htm#7">even though older people have higher risk of complications, they were less likely to get infected!</a> While we know anything about causality from this analysis, it seems like the risk factors ended up being reflected in the vaccination rates.</p>
 
-##Building some models
+## Building some models
 <p>Let's start working on training some models! We will be using logistic regression, a simple and fast linear model for classification problems. Logistic regression is a great model choice for a first-pass baseline model when starting out on a problem.</p>
 ```{r}
 
@@ -310,7 +310,7 @@ for (i in colnames(features_df)){
 }
 numeric_cols <- as.vector(numeric_cols)
 ```
-##Feature-Preprocessing
+## Feature-Preprocessing
 <p>There are two important data preprocessing steps before jumping to the logistic regression:</p>
 <ul>
 <li><strong>Scaling</strong>: Transform all features to be on the same scale. This matters when using regularization, which we will discuss in the next section. We will use <a href="https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html"><code>StandardScaler</code></a>, also known as Z-score scaling. This scales and shifts features so that they have zero mean and unit variance. </li>
@@ -331,14 +331,14 @@ scaled_df <- as.data.frame(scaled_df)%>%
 <p>Next, we're going to define our estimators.</p>
 <p>We'll use scikit-learn's default hyperparameters for <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html"><code>LogisticRegression</code></a> of L2 (a.k.a. Ridge) regularization with <code>C</code> value (inverse regularization strength) of 1. <a href="https://towardsdatascience.com/regularization-in-machine-learning-76441ddcf99a">Regularization</a> is useful because it reduces overfitting. Check out scikit-learn's documentation for <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html"><code>LogisticRegression</code></a> to read more about the options. When building your own model, you may want to tune your hyperparameters using something like <a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.html">GridSearchCV</a>.</p>
 <p>Because we have two labels we need to predict, we can use Scikit-Learn's <a href="https://scikit-learn.org/stable/modules/generated/sklearn.multioutput.MultiOutputClassifier.html"><code>MultiOutputClassifier</code></a>. This is a convenient shortcut for training two of the same type of model and having them run together.</p>
-##Estimator
+## Estimator
 ```{r}
 # Logistics Regression
 #model <- glm(Survived ~.,family=binomial(link='logit'),data=train)
 
 
 ```
-##Training and Evaluation
+## Training and Evaluation
 <p>Finally, let's get ready to train and evaluate our model.</p>
 <p>Let's split our available data into a training and evaluation set. (We're going to reserve "test set" to refer to the final predictions we upload to the platform.) We'll use a third of our data for evaluation.</p>
 <p>Recall that earlier in our exploratory analysis, the <code>h1n1_vaccine</code> label classes were moderately imbalanced. Sometimes this can lead to lopsided splits, which can lead to generalization problems with fitting and/or evaluating the model. We should have a large enough dataset that a randomly shuffled split should keep the same proportions, but we can use the <code>stratify</code> argument to enforce even splits.</p>
@@ -407,7 +407,7 @@ auc(pROC_obj)
 
 <p>An AUC score of 0.5 is no better than random, and an AUC score of 1.0 is a perfect model. Both models look like they generally perform similarly. Our scores of around 0.83 are not great, but they're not bad either!</p>
 <p>The competition metric is the average between these two AUC values. Scikit-learn's <a href="http://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html"><code>roc_auc_score</code></a> <em>does</em> support multilabel, so we can use that directly.</p>
-##Retrain Model on Full Dataset
+## Retrain Model on Full Dataset
 <p>Now that we have an idea of our performance, we'll want to retrain our model on the full dataset before generating our predictions on the test set.</p>
 ```{r}
 scaled_df.h1 <- scaled_df%>%
@@ -488,8 +488,8 @@ submission_df <- submission_df %>%
 ```{r}
 write.csv(submission_df,"submission.csv", row.names = FALSE)
 ```
-##Submit to the Leaderboard
+## Submit to the Leaderboard
 <p>We can then head over to the competition <a href="https://www.drivendata.org/competitions/66/flu-shot-learning/submissions/">submissions page</a> to submit the predictions.</p>
-![score](score.png)
+![](score.png)
 
 Done!
