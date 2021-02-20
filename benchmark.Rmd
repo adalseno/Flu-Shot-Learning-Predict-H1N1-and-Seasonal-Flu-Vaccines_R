@@ -488,6 +488,11 @@ submission_df <- submission_df %>%
 ```{r}
 write.csv(submission_df,"submission.csv", row.names = FALSE)
 ```
+
+```{bash}
+head submission.csv
+```
+
 ## Submit to the Leaderboard
 <p>We can then head over to the competition <a href="https://www.drivendata.org/competitions/66/flu-shot-learning/submissions/">submissions page</a> to submit the predictions.</p>
 ![](score.png)
