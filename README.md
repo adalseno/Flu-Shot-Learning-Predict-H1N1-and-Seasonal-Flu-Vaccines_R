@@ -2,7 +2,7 @@
 # Flu Shot Learning: Predict H1N1 and Seasonal Flu Vaccines in R
 
 This is a R markdown version of the [benchmark file in python](https://www.drivendata.co/blog/predict-flu-vaccine-data-benchmark/) by [Jay Qi](https://www.drivendata.co/#jay-qi) for [Flu Shot DrivenData competition](https://www.drivendata.org/competitions/66/flu-shot-learning/).
-I'm pretty confident in python but I'm a newbie in R so I thought that translating some python code would have been a good way to practise and improve my skills. I did my best to mimic the output of python code wherever possible. For example I reversed the factor order in ggplot (actually ggplot2). Please note that ggplot wants data in long format not in wide one so I had to change some code for plotting. I haven't been able to plot the graphs side by side like in python (if some R expert wants to give me a hint he's more than welcome).
+I'm pretty confident in python but I'm a newbie in R so I thought that translating some python code would have been a good way to practise and improve my skills. I did my best to mimic the output of python code wherever possible. For example I reversed the factor order in ggplot (actually ggplot2). Please note that ggplot wants data in long format not in wide one so I had to change some code for plotting. I haven't been able to plot the graphs side by side like in python (if some R expert wants to give me a hint he's more than welcome; `grid.arrange` did the trick but the output was awful).
 
 I haven't been able to reproduce everything though. I could not find something similar to `MultiOutputClassifier` in R so I made the predictions separately. Anyway it worked fine with the same final result.
 
