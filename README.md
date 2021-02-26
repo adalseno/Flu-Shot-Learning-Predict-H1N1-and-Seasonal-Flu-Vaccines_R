@@ -1,4 +1,4 @@
-![flushot](https://drivendata-public-assets.s3.amazonaws.com/flu-vaccine.jpg)
+<img src="https://drivendata-public-assets.s3.amazonaws.com/flu-vaccine.jpg" alt="flu_shot" width="75%"/>
 # Flu Shot Learning: Predict H1N1 and Seasonal Flu Vaccines in R
 
 This is a R markdown version of the [benchmark file in python](https://www.drivendata.co/blog/predict-flu-vaccine-data-benchmark/) by [Jay Qi](https://www.drivendata.co/#jay-qi) for [Flu Shot DrivenData competition](https://www.drivendata.org/competitions/66/flu-shot-learning/).
